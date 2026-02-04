@@ -97,6 +97,68 @@ void computeForceField(struct world * jello, struct point * position, struct poi
   force->z = f0.z * (1 - fx) + f1.z * fx;
 }
 
+/* Computes spring force between two points using Hooke's Law and damping.
+
+   Hooke's Law: F_hook = -k * (|L| - R) * (L / |L|)
+   Damping:     F_damp = -d * ((vA - vB) · (L / |L|)) * (L / |L|)
+
+   Where L = pA - pB (vector from B to A), R = rest length
+   Force is accumulated into forceAccum (force on point A) */
+void computeSpringForce(struct point * pA, struct point * pB,
+                        struct point * vA, struct point * vB,
+                        double kElastic, double dElastic,
+                        double restLength, struct point * forceAccum)
+{
+  struct point L;        // Vector from B to A
+  struct point Lnorm;    // Normalized L
+  struct point vDiff;    // Velocity difference vA - vB
+  double length;         // Required by pNORMALIZE macro
+  double currentLength;  // |L|
+  double extension;      // |L| - R (how much spring is stretched)
+  double dotProduct;     // (vA - vB) · Lnorm
+
+  // L = pA - pB
+  pDIFFERENCE(*pA, *pB, L);
+
+  // Compute current spring length |L|
+  currentLength = sqrt(L.x * L.x + L.y * L.y + L.z * L.z);
+
+  // Avoid division by zero for coincident points
+  if (currentLength < 1e-10)
+    return;
+
+  // Normalized direction vector
+  Lnorm.x = L.x / currentLength;
+  Lnorm.y = L.y / currentLength;
+  Lnorm.z = L.z / currentLength;
+
+  // Extension: positive when stretched, negative when compressed
+  extension = currentLength - restLength;
+
+  // Hooke's Law: F = -k * extension * direction
+  // When stretched (extension > 0), force pulls A toward B (negative direction)
+  // When compressed (extension < 0), force pushes A away from B (positive direction)
+  struct point hookForce;
+  hookForce.x = -kElastic * extension * Lnorm.x;
+  hookForce.y = -kElastic * extension * Lnorm.y;
+  hookForce.z = -kElastic * extension * Lnorm.z;
+
+  // Damping force: F = -d * ((vA - vB) · Lnorm) * Lnorm
+  // Damps relative motion along the spring direction
+  pDIFFERENCE(*vA, *vB, vDiff);
+  dotProduct = vDiff.x * Lnorm.x + vDiff.y * Lnorm.y + vDiff.z * Lnorm.z;
+
+  struct point dampForce;
+  dampForce.x = -dElastic * dotProduct * Lnorm.x;
+  dampForce.y = -dElastic * dotProduct * Lnorm.y;
+  dampForce.z = -dElastic * dotProduct * Lnorm.z;
+
+  // Accumulate forces
+  forceAccum->x += hookForce.x + dampForce.x;
+  forceAccum->y += hookForce.y + dampForce.y;
+  forceAccum->z += hookForce.z + dampForce.z;
+}
+
 /* Computes acceleration to every control point of the jello cube,
    which is in state given by 'jello'.
    Returns result in array 'a'. */
@@ -125,7 +187,111 @@ void computeAcceleration(struct world * jello, struct point a[8][8][8])
         computeForceField(jello, &jello->p[i][j][k], &forceField);
         pSUM(force, forceField, force);
 
-        // TODO: 2. Spring forces (structural, shear, bend)
+        // 2. Spring forces
+
+        // Rest lengths (grid spans 0 to 1 with 7 intervals, so spacing = 1/7)
+        double restStructural = 1.0 / 7.0;  // Structural: adjacent neighbors
+
+        // Structural springs: connect to immediate neighbors (±1,0,0), (0,±1,0), (0,0,±1)
+        // 6 potential neighbors per point
+        int structuralOffsets[6][3] = {
+          {-1, 0, 0}, {1, 0, 0},   // x-axis neighbors
+          {0, -1, 0}, {0, 1, 0},   // y-axis neighbors
+          {0, 0, -1}, {0, 0, 1}    // z-axis neighbors
+        };
+
+        for (int s = 0; s < 6; s++)
+        {
+          int ni = i + structuralOffsets[s][0];
+          int nj = j + structuralOffsets[s][1];
+          int nk = k + structuralOffsets[s][2];
+
+          // Check bounds
+          if (ni >= 0 && ni <= 7 && nj >= 0 && nj <= 7 && nk >= 0 && nk <= 7)
+          {
+            computeSpringForce(&jello->p[i][j][k], &jello->p[ni][nj][nk],
+                               &jello->v[i][j][k], &jello->v[ni][nj][nk],
+                               jello->kElastic, jello->dElastic,
+                               restStructural, &force);
+          }
+        }
+
+        // Shear springs: face diagonals (±1,±1,0), (±1,0,±1), (0,±1,±1)
+        // Rest length: sqrt(2)/7 (diagonal on a face)
+        double restShearFace = sqrt(2.0) / 7.0;
+
+        int shearFaceOffsets[12][3] = {
+          // xy-plane diagonals
+          {-1, -1, 0}, {-1, 1, 0}, {1, -1, 0}, {1, 1, 0},
+          // xz-plane diagonals
+          {-1, 0, -1}, {-1, 0, 1}, {1, 0, -1}, {1, 0, 1},
+          // yz-plane diagonals
+          {0, -1, -1}, {0, -1, 1}, {0, 1, -1}, {0, 1, 1}
+        };
+
+        for (int s = 0; s < 12; s++)
+        {
+          int ni = i + shearFaceOffsets[s][0];
+          int nj = j + shearFaceOffsets[s][1];
+          int nk = k + shearFaceOffsets[s][2];
+
+          if (ni >= 0 && ni <= 7 && nj >= 0 && nj <= 7 && nk >= 0 && nk <= 7)
+          {
+            computeSpringForce(&jello->p[i][j][k], &jello->p[ni][nj][nk],
+                               &jello->v[i][j][k], &jello->v[ni][nj][nk],
+                               jello->kElastic, jello->dElastic,
+                               restShearFace, &force);
+          }
+        }
+
+        // Shear springs: body diagonals (±1,±1,±1)
+        // Rest length: sqrt(3)/7 (diagonal through the body)
+        double restShearBody = sqrt(3.0) / 7.0;
+
+        int shearBodyOffsets[8][3] = {
+          {-1, -1, -1}, {-1, -1, 1}, {-1, 1, -1}, {-1, 1, 1},
+          {1, -1, -1}, {1, -1, 1}, {1, 1, -1}, {1, 1, 1}
+        };
+
+        for (int s = 0; s < 8; s++)
+        {
+          int ni = i + shearBodyOffsets[s][0];
+          int nj = j + shearBodyOffsets[s][1];
+          int nk = k + shearBodyOffsets[s][2];
+
+          if (ni >= 0 && ni <= 7 && nj >= 0 && nj <= 7 && nk >= 0 && nk <= 7)
+          {
+            computeSpringForce(&jello->p[i][j][k], &jello->p[ni][nj][nk],
+                               &jello->v[i][j][k], &jello->v[ni][nj][nk],
+                               jello->kElastic, jello->dElastic,
+                               restShearBody, &force);
+          }
+        }
+
+        // Bend springs: connect to neighbors 2 steps away (±2,0,0), (0,±2,0), (0,0,±2)
+        // Rest length: 2/7 (skips one neighbor)
+        double restBend = 2.0 / 7.0;
+
+        int bendOffsets[6][3] = {
+          {-2, 0, 0}, {2, 0, 0},   // x-axis
+          {0, -2, 0}, {0, 2, 0},   // y-axis
+          {0, 0, -2}, {0, 0, 2}    // z-axis
+        };
+
+        for (int s = 0; s < 6; s++)
+        {
+          int ni = i + bendOffsets[s][0];
+          int nj = j + bendOffsets[s][1];
+          int nk = k + bendOffsets[s][2];
+
+          if (ni >= 0 && ni <= 7 && nj >= 0 && nj <= 7 && nk >= 0 && nk <= 7)
+          {
+            computeSpringForce(&jello->p[i][j][k], &jello->p[ni][nj][nk],
+                               &jello->v[i][j][k], &jello->v[ni][nj][nk],
+                               jello->kElastic, jello->dElastic,
+                               restBend, &force);
+          }
+        }
 
         // TODO: 3. Collision forces (bounding box, inclined plane)
 
