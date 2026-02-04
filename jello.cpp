@@ -39,8 +39,8 @@ void myinit()
   glLoadIdentity();
   gluPerspective(90.0,1.0,0.01,1000.0);
 
-  // set background color to grey
-  glClearColor(0.5, 0.5, 0.5, 0.0);
+  // set background color to sky blue
+  glClearColor(0.53, 0.81, 0.92, 0.0);
 
   glCullFace(GL_BACK);
   glEnable(GL_CULL_FACE);
@@ -90,63 +90,61 @@ void display()
 
 
   /* Lighting */
-  /* You are encouraged to change lighting parameters or make improvements/modifications
-     to the lighting model . 
-     This way, you will personalize your assignment and your assignment will stick out. 
-  */
+  /* Personalized cinematic three-point lighting setup for red/orange jello */
 
-  // global ambient light
-  GLfloat aGa[] = { 0.0, 0.0, 0.0, 0.0 };
-  
-  // light 's ambient, diffuse, specular
-  GLfloat lKa0[] = { 0.0, 0.0, 0.0, 1.0 };
-  GLfloat lKd0[] = { 1.0, 1.0, 1.0, 1.0 };
-  GLfloat lKs0[] = { 1.0, 1.0, 1.0, 1.0 };
+  // Global ambient light - warm sunlight
+  GLfloat aGa[] = { 0.25, 0.22, 0.12, 1.0 };
 
-  GLfloat lKa1[] = { 0.0, 0.0, 0.0, 1.0 };
-  GLfloat lKd1[] = { 1.0, 0.0, 0.0, 1.0 };
-  GLfloat lKs1[] = { 1.0, 0.0, 0.0, 1.0 };
+  // Light 0: Key light - warm orange/gold (main illumination)
+  GLfloat lKa0[] = { 0.05, 0.03, 0.01, 1.0 };
+  GLfloat lKd0[] = { 1.0, 0.85, 0.6, 1.0 };
+  GLfloat lKs0[] = { 1.0, 0.95, 0.8, 1.0 };
+  GLfloat lP0[] = { 3.0, -2.0, 3.0, 1.0 };
 
-  GLfloat lKa2[] = { 0.0, 0.0, 0.0, 1.0 };
-  GLfloat lKd2[] = { 1.0, 1.0, 0.0, 1.0 };
-  GLfloat lKs2[] = { 1.0, 1.0, 0.0, 1.0 };
+  // Light 1: Fill light - cool blue (softens shadows)
+  GLfloat lKa1[] = { 0.01, 0.02, 0.03, 1.0 };
+  GLfloat lKd1[] = { 0.3, 0.4, 0.6, 1.0 };
+  GLfloat lKs1[] = { 0.2, 0.3, 0.5, 1.0 };
+  GLfloat lP1[] = { -3.0, -1.0, 1.0, 1.0 };
 
-  GLfloat lKa3[] = { 0.0, 0.0, 0.0, 1.0 };
-  GLfloat lKd3[] = { 0.0, 1.0, 1.0, 1.0 };
-  GLfloat lKs3[] = { 0.0, 1.0, 1.0, 1.0 };
+  // Light 2: Rim light - pale yellow (edge definition)
+  GLfloat lKa2[] = { 0.02, 0.02, 0.01, 1.0 };
+  GLfloat lKd2[] = { 0.8, 0.8, 0.6, 1.0 };
+  GLfloat lKs2[] = { 0.9, 0.9, 0.7, 1.0 };
+  GLfloat lP2[] = { 0.0, 3.0, 2.0, 1.0 };
 
+  // Light 3: Under light - subtle purple (depth)
+  GLfloat lKa3[] = { 0.01, 0.0, 0.02, 1.0 };
+  GLfloat lKd3[] = { 0.2, 0.1, 0.3, 1.0 };
+  GLfloat lKs3[] = { 0.15, 0.1, 0.2, 1.0 };
+  GLfloat lP3[] = { 0.0, 0.0, -3.0, 1.0 };
+
+  // Lights 4-7: Disabled (black)
   GLfloat lKa4[] = { 0.0, 0.0, 0.0, 1.0 };
-  GLfloat lKd4[] = { 0.0, 0.0, 1.0, 1.0 };
-  GLfloat lKs4[] = { 0.0, 0.0, 1.0, 1.0 };
+  GLfloat lKd4[] = { 0.0, 0.0, 0.0, 1.0 };
+  GLfloat lKs4[] = { 0.0, 0.0, 0.0, 1.0 };
+  GLfloat lP4[] = { 0.0, 0.0, 0.0, 1.0 };
 
   GLfloat lKa5[] = { 0.0, 0.0, 0.0, 1.0 };
-  GLfloat lKd5[] = { 1.0, 0.0, 1.0, 1.0 };
-  GLfloat lKs5[] = { 1.0, 0.0, 1.0, 1.0 };
+  GLfloat lKd5[] = { 0.0, 0.0, 0.0, 1.0 };
+  GLfloat lKs5[] = { 0.0, 0.0, 0.0, 1.0 };
+  GLfloat lP5[] = { 0.0, 0.0, 0.0, 1.0 };
 
   GLfloat lKa6[] = { 0.0, 0.0, 0.0, 1.0 };
-  GLfloat lKd6[] = { 1.0, 1.0, 1.0, 1.0 };
-  GLfloat lKs6[] = { 1.0, 1.0, 1.0, 1.0 };
+  GLfloat lKd6[] = { 0.0, 0.0, 0.0, 1.0 };
+  GLfloat lKs6[] = { 0.0, 0.0, 0.0, 1.0 };
+  GLfloat lP6[] = { 0.0, 0.0, 0.0, 1.0 };
 
   GLfloat lKa7[] = { 0.0, 0.0, 0.0, 1.0 };
-  GLfloat lKd7[] = { 0.0, 1.0, 1.0, 1.0 };
-  GLfloat lKs7[] = { 0.0, 1.0, 1.0, 1.0 };
+  GLfloat lKd7[] = { 0.0, 0.0, 0.0, 1.0 };
+  GLfloat lKs7[] = { 0.0, 0.0, 0.0, 1.0 };
+  GLfloat lP7[] = { 0.0, 0.0, 0.0, 1.0 };
 
-  // light positions and directions
-  GLfloat lP0[] = { -1.999, -1.999, -1.999, 1.0 };
-  GLfloat lP1[] = { 1.999, -1.999, -1.999, 1.0 };
-  GLfloat lP2[] = { 1.999, 1.999, -1.999, 1.0 };
-  GLfloat lP3[] = { -1.999, 1.999, -1.999, 1.0 };
-  GLfloat lP4[] = { -1.999, -1.999, 1.999, 1.0 };
-  GLfloat lP5[] = { 1.999, -1.999, 1.999, 1.0 };
-  GLfloat lP6[] = { 1.999, 1.999, 1.999, 1.0 };
-  GLfloat lP7[] = { -1.999, 1.999, 1.999, 1.0 };
-  
-  // jelly material color
-
-  GLfloat mKa[] = { 0.0, 0.0, 0.0, 1.0 };
-  GLfloat mKd[] = { 0.3, 0.3, 0.3, 1.0 };
-  GLfloat mKs[] = { 1.0, 1.0, 1.0, 1.0 };
-  GLfloat mKe[] = { 0.0, 0.0, 0.0, 1.0 };
+  // Jelly material - red translucent appearance with sunlight highlights
+  GLfloat mKa[] = { 0.2, 0.02, 0.02, 1.0 };   // Ambient: deep red tint
+  GLfloat mKd[] = { 0.9, 0.1, 0.1, 1.0 };     // Diffuse: bright red
+  GLfloat mKs[] = { 1.0, 0.95, 0.4, 1.0 };    // Specular: yellow sunlight highlights
+  GLfloat mKe[] = { 0.05, 0.0, 0.0, 1.0 };    // Emissive: subtle red glow
 
   /* set up lighting */
   glLightModelfv(GL_LIGHT_MODEL_AMBIENT, aGa);
@@ -158,8 +156,8 @@ void display()
   glMaterialfv(GL_FRONT, GL_DIFFUSE, mKd);
   glMaterialfv(GL_FRONT, GL_SPECULAR, mKs);
   glMaterialfv(GL_FRONT, GL_EMISSION, mKe);
-  glMaterialf(GL_FRONT, GL_SHININESS, 120);
-    
+  glMaterialf(GL_FRONT, GL_SHININESS, 80);  // Slightly less shiny for jello look
+
   // macro to set up light i
   #define LIGHTSETUP(i)\
   glLightfv(GL_LIGHT##i, GL_POSITION, lP##i);\
@@ -167,7 +165,7 @@ void display()
   glLightfv(GL_LIGHT##i, GL_DIFFUSE, lKd##i);\
   glLightfv(GL_LIGHT##i, GL_SPECULAR, lKs##i);\
   glEnable(GL_LIGHT##i)
-  
+
   LIGHTSETUP (0);
   LIGHTSETUP (1);
   LIGHTSETUP (2);
@@ -217,7 +215,29 @@ void doIdle()
 
   if (pause == 0)
   {
-    // insert code which appropriately performs one step of the cube simulation:
+    // Perform n steps of simulation per frame
+    for (int step = 0; step < jello.n; step++)
+    {
+      if (strcmp(jello.integrator, "RK4") == 0)
+        RK4(&jello);
+      else if (strcmp(jello.integrator, "Euler") == 0)
+        Euler(&jello);
+    }
+
+    // Blow-up detection: check if any point has gone too far
+    for (int i = 0; i <= 7; i++)
+      for (int j = 0; j <= 7; j++)
+        for (int k = 0; k <= 7; k++)
+        {
+          if (fabs(jello.p[i][j][k].x) > 10.0 ||
+              fabs(jello.p[i][j][k].y) > 10.0 ||
+              fabs(jello.p[i][j][k].z) > 10.0)
+          {
+            printf("Simulation blew up! Point [%d][%d][%d] at (%.2f, %.2f, %.2f)\n",
+                   i, j, k, jello.p[i][j][k].x, jello.p[i][j][k].y, jello.p[i][j][k].z);
+            exit(1);
+          }
+        }
   }
 
   glutPostRedisplay();

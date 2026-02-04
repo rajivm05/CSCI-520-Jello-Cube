@@ -1,6 +1,9 @@
 #Ignore claude metadata
 CLAUDE.md
 
+jello
+createWorld
+
 #Ignore build artifacts
 build/
 *.o
