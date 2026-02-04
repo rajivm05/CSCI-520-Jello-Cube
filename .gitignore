@@ -1,0 +1,21 @@
+#Ignore claude metadata
+CLAUDE.md
+
+#Ignore build artifacts
+build/
+*.o
+*.out
+*.a
+*.so
+
+#Ignore CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+
+#Ignore editor files
+./vscode/
+*.swp
+*.swo
