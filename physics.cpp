@@ -293,7 +293,102 @@ void computeAcceleration(struct world * jello, struct point a[8][8][8])
           }
         }
 
-        // TODO: 3. Collision forces (bounding box, inclined plane)
+        // 3. Collision forces
+
+        // Bounding box collision: box spans -2 to +2 in each dimension
+        // Use penalty method: collision spring with rest length 0
+        // Spring pushes point back into valid region
+        double boxMin = -2.0;
+        double boxMax = 2.0;
+
+        struct point * pos = &jello->p[i][j][k];
+        struct point * vel = &jello->v[i][j][k];
+
+        // Check each axis for collision
+        // X-axis
+        if (pos->x < boxMin)
+        {
+          double penetration = boxMin - pos->x;
+          // Normal points inward (+x direction)
+          // Hooke: F = k * penetration * normal
+          force.x += jello->kCollision * penetration;
+          // Damping: F = -d * (v · normal) * normal
+          force.x += -jello->dCollision * vel->x;
+        }
+        else if (pos->x > boxMax)
+        {
+          double penetration = pos->x - boxMax;
+          // Normal points inward (-x direction)
+          force.x += -jello->kCollision * penetration;
+          force.x += -jello->dCollision * vel->x;
+        }
+
+        // Y-axis
+        if (pos->y < boxMin)
+        {
+          double penetration = boxMin - pos->y;
+          force.y += jello->kCollision * penetration;
+          force.y += -jello->dCollision * vel->y;
+        }
+        else if (pos->y > boxMax)
+        {
+          double penetration = pos->y - boxMax;
+          force.y += -jello->kCollision * penetration;
+          force.y += -jello->dCollision * vel->y;
+        }
+
+        // Z-axis
+        if (pos->z < boxMin)
+        {
+          double penetration = boxMin - pos->z;
+          force.z += jello->kCollision * penetration;
+          force.z += -jello->dCollision * vel->z;
+        }
+        else if (pos->z > boxMax)
+        {
+          double penetration = pos->z - boxMax;
+          force.z += -jello->kCollision * penetration;
+          force.z += -jello->dCollision * vel->z;
+        }
+
+        // Inclined plane collision
+        // Plane equation: a*x + b*y + c*z + d = 0
+        // Normal vector is (a, b, c)
+        // F(x,y,z) > 0 on one side, F(x,y,z) < 0 on the other
+        // Cube starts at (0,0,0) to (1,1,1), assume it starts on F > 0 side
+        if (jello->incPlanePresent == 1)
+        {
+          // Compute signed distance to plane (not normalized)
+          double F = jello->a * pos->x + jello->b * pos->y + jello->c * pos->z + jello->d;
+
+          // Compute normal length for normalization
+          double normalLength = sqrt(jello->a * jello->a + jello->b * jello->b + jello->c * jello->c);
+
+          // If F < 0, point has penetrated the plane
+          if (F < 0 && normalLength > 1e-10)
+          {
+            // Penetration depth (positive value)
+            double penetration = -F / normalLength;
+
+            // Unit normal pointing toward valid region (F > 0 side)
+            double nx = jello->a / normalLength;
+            double ny = jello->b / normalLength;
+            double nz = jello->c / normalLength;
+
+            // Collision spring force: pushes point back to valid side
+            // F = k * penetration * normal
+            force.x += jello->kCollision * penetration * nx;
+            force.y += jello->kCollision * penetration * ny;
+            force.z += jello->kCollision * penetration * nz;
+
+            // Damping: damp velocity component toward the plane
+            // F = -d * (v · n) * n
+            double vDotN = vel->x * nx + vel->y * ny + vel->z * nz;
+            force.x += -jello->dCollision * vDotN * nx;
+            force.y += -jello->dCollision * vDotN * ny;
+            force.z += -jello->dCollision * vDotN * nz;
+          }
+        }
 
         // Convert force to acceleration: a = F / m
         pMULTIPLY(force, 1.0 / jello->mass, a[i][j][k]);
