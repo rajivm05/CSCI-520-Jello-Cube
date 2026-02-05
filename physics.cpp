@@ -8,6 +8,50 @@
 #include "jello.h"
 #include "physics.h"
 
+#include <thread>
+#include <algorithm>
+#include <vector>
+
+// Number of control points (8x8x8 = 512)
+#define TOTAL_POINTS 512
+
+// Convert flat index to 3D indices
+static inline void flatTo3D(int flat, int &i, int &j, int &k)
+{
+  i = flat / 64;        // flat / (8*8)
+  j = (flat / 8) % 8;
+  k = flat % 8;
+}
+
+// Number of hardware threads for parallelization
+static const unsigned int NUM_THREADS = std::max(1u, std::thread::hardware_concurrency());
+
+// Helper: run a function in parallel over flat point indices [0, TOTAL_POINTS)
+// func(start, end) is called for each thread's assigned range
+template <typename Func>
+static void parallelForPoints(Func func)
+{
+  if (NUM_THREADS <= 1)
+  {
+    func(0, TOTAL_POINTS);
+    return;
+  }
+
+  std::vector<std::thread> threads;
+  threads.reserve(NUM_THREADS);
+
+  int blockSize = TOTAL_POINTS / NUM_THREADS;
+  for (unsigned int t = 0; t < NUM_THREADS; t++)
+  {
+    int start = t * blockSize;
+    int end = (t == NUM_THREADS - 1) ? TOTAL_POINTS : (t + 1) * blockSize;
+    threads.emplace_back(func, start, end);
+  }
+
+  for (auto& thread : threads)
+    thread.join();
+}
+
 /* Computes the external force at a given position using trilinear interpolation
    of the force field grid. Force field spans -2 to +2 in each dimension. */
 void computeForceField(struct world * jello, struct point * position, struct point * force)
@@ -164,235 +208,208 @@ void computeSpringForce(struct point * pA, struct point * pB,
    Returns result in array 'a'. */
 void computeAcceleration(struct world * jello, struct point a[8][8][8])
 {
-  int i, j, k;
-  struct point forceField;
-
   // Initialize all accelerations to zero
-  for (i = 0; i <= 7; i++)
-    for (j = 0; j <= 7; j++)
-      for (k = 0; k <= 7; k++)
+  for (int i = 0; i <= 7; i++)
+    for (int j = 0; j <= 7; j++)
+      for (int k = 0; k <= 7; k++)
       {
         pMAKE(0.0, 0.0, 0.0, a[i][j][k]);
       }
 
-  // Accumulate forces for each point
-  for (i = 0; i <= 7; i++)
-    for (j = 0; j <= 7; j++)
-      for (k = 0; k <= 7; k++)
+  // Accumulate forces for each point in parallel
+  // Each thread processes a range of flat indices [start, end)
+  // Safe because each point only writes to its own a[i][j][k] entry
+  parallelForPoints([&](int start, int end) {
+    for (int flat = start; flat < end; flat++)
+    {
+      int i, j, k;
+      flatTo3D(flat, i, j, k);
+
+      struct point force;
+      pMAKE(0.0, 0.0, 0.0, force);
+
+      // 1. External force field
+      struct point forceField;
+      computeForceField(jello, &jello->p[i][j][k], &forceField);
+      pSUM(force, forceField, force);
+
+      // 2. Spring forces
+
+      // Rest lengths (grid spans 0 to 1 with 7 intervals, so spacing = 1/7)
+      double restStructural = 1.0 / 7.0;
+
+      // Structural springs: connect to immediate neighbors
+      int structuralOffsets[6][3] = {
+        {-1, 0, 0}, {1, 0, 0},
+        {0, -1, 0}, {0, 1, 0},
+        {0, 0, -1}, {0, 0, 1}
+      };
+
+      for (int s = 0; s < 6; s++)
       {
-        struct point force;
-        pMAKE(0.0, 0.0, 0.0, force);
+        int ni = i + structuralOffsets[s][0];
+        int nj = j + structuralOffsets[s][1];
+        int nk = k + structuralOffsets[s][2];
 
-        // 1. External force field
-        computeForceField(jello, &jello->p[i][j][k], &forceField);
-        pSUM(force, forceField, force);
-
-        // 2. Spring forces
-
-        // Rest lengths (grid spans 0 to 1 with 7 intervals, so spacing = 1/7)
-        double restStructural = 1.0 / 7.0;  // Structural: adjacent neighbors
-
-        // Structural springs: connect to immediate neighbors (±1,0,0), (0,±1,0), (0,0,±1)
-        // 6 potential neighbors per point
-        int structuralOffsets[6][3] = {
-          {-1, 0, 0}, {1, 0, 0},   // x-axis neighbors
-          {0, -1, 0}, {0, 1, 0},   // y-axis neighbors
-          {0, 0, -1}, {0, 0, 1}    // z-axis neighbors
-        };
-
-        for (int s = 0; s < 6; s++)
+        if (ni >= 0 && ni <= 7 && nj >= 0 && nj <= 7 && nk >= 0 && nk <= 7)
         {
-          int ni = i + structuralOffsets[s][0];
-          int nj = j + structuralOffsets[s][1];
-          int nk = k + structuralOffsets[s][2];
-
-          // Check bounds
-          if (ni >= 0 && ni <= 7 && nj >= 0 && nj <= 7 && nk >= 0 && nk <= 7)
-          {
-            computeSpringForce(&jello->p[i][j][k], &jello->p[ni][nj][nk],
-                               &jello->v[i][j][k], &jello->v[ni][nj][nk],
-                               jello->kElastic, jello->dElastic,
-                               restStructural, &force);
-          }
+          computeSpringForce(&jello->p[i][j][k], &jello->p[ni][nj][nk],
+                             &jello->v[i][j][k], &jello->v[ni][nj][nk],
+                             jello->kElastic, jello->dElastic,
+                             restStructural, &force);
         }
-
-        // Shear springs: face diagonals (±1,±1,0), (±1,0,±1), (0,±1,±1)
-        // Rest length: sqrt(2)/7 (diagonal on a face)
-        double restShearFace = sqrt(2.0) / 7.0;
-
-        int shearFaceOffsets[12][3] = {
-          // xy-plane diagonals
-          {-1, -1, 0}, {-1, 1, 0}, {1, -1, 0}, {1, 1, 0},
-          // xz-plane diagonals
-          {-1, 0, -1}, {-1, 0, 1}, {1, 0, -1}, {1, 0, 1},
-          // yz-plane diagonals
-          {0, -1, -1}, {0, -1, 1}, {0, 1, -1}, {0, 1, 1}
-        };
-
-        for (int s = 0; s < 12; s++)
-        {
-          int ni = i + shearFaceOffsets[s][0];
-          int nj = j + shearFaceOffsets[s][1];
-          int nk = k + shearFaceOffsets[s][2];
-
-          if (ni >= 0 && ni <= 7 && nj >= 0 && nj <= 7 && nk >= 0 && nk <= 7)
-          {
-            computeSpringForce(&jello->p[i][j][k], &jello->p[ni][nj][nk],
-                               &jello->v[i][j][k], &jello->v[ni][nj][nk],
-                               jello->kElastic, jello->dElastic,
-                               restShearFace, &force);
-          }
-        }
-
-        // Shear springs: body diagonals (±1,±1,±1)
-        // Rest length: sqrt(3)/7 (diagonal through the body)
-        double restShearBody = sqrt(3.0) / 7.0;
-
-        int shearBodyOffsets[8][3] = {
-          {-1, -1, -1}, {-1, -1, 1}, {-1, 1, -1}, {-1, 1, 1},
-          {1, -1, -1}, {1, -1, 1}, {1, 1, -1}, {1, 1, 1}
-        };
-
-        for (int s = 0; s < 8; s++)
-        {
-          int ni = i + shearBodyOffsets[s][0];
-          int nj = j + shearBodyOffsets[s][1];
-          int nk = k + shearBodyOffsets[s][2];
-
-          if (ni >= 0 && ni <= 7 && nj >= 0 && nj <= 7 && nk >= 0 && nk <= 7)
-          {
-            computeSpringForce(&jello->p[i][j][k], &jello->p[ni][nj][nk],
-                               &jello->v[i][j][k], &jello->v[ni][nj][nk],
-                               jello->kElastic, jello->dElastic,
-                               restShearBody, &force);
-          }
-        }
-
-        // Bend springs: connect to neighbors 2 steps away (±2,0,0), (0,±2,0), (0,0,±2)
-        // Rest length: 2/7 (skips one neighbor)
-        double restBend = 2.0 / 7.0;
-
-        int bendOffsets[6][3] = {
-          {-2, 0, 0}, {2, 0, 0},   // x-axis
-          {0, -2, 0}, {0, 2, 0},   // y-axis
-          {0, 0, -2}, {0, 0, 2}    // z-axis
-        };
-
-        for (int s = 0; s < 6; s++)
-        {
-          int ni = i + bendOffsets[s][0];
-          int nj = j + bendOffsets[s][1];
-          int nk = k + bendOffsets[s][2];
-
-          if (ni >= 0 && ni <= 7 && nj >= 0 && nj <= 7 && nk >= 0 && nk <= 7)
-          {
-            computeSpringForce(&jello->p[i][j][k], &jello->p[ni][nj][nk],
-                               &jello->v[i][j][k], &jello->v[ni][nj][nk],
-                               jello->kElastic, jello->dElastic,
-                               restBend, &force);
-          }
-        }
-
-        // 3. Collision forces
-
-        // Bounding box collision: box spans -2 to +2 in each dimension
-        // Use penalty method: collision spring with rest length 0
-        // Spring pushes point back into valid region
-        double boxMin = -2.0;
-        double boxMax = 2.0;
-
-        struct point * pos = &jello->p[i][j][k];
-        struct point * vel = &jello->v[i][j][k];
-
-        // Check each axis for collision
-        // X-axis
-        if (pos->x < boxMin)
-        {
-          double penetration = boxMin - pos->x;
-          // Normal points inward (+x direction)
-          // Hooke: F = k * penetration * normal
-          force.x += jello->kCollision * penetration;
-          // Damping: F = -d * (v · normal) * normal
-          force.x += -jello->dCollision * vel->x;
-        }
-        else if (pos->x > boxMax)
-        {
-          double penetration = pos->x - boxMax;
-          // Normal points inward (-x direction)
-          force.x += -jello->kCollision * penetration;
-          force.x += -jello->dCollision * vel->x;
-        }
-
-        // Y-axis
-        if (pos->y < boxMin)
-        {
-          double penetration = boxMin - pos->y;
-          force.y += jello->kCollision * penetration;
-          force.y += -jello->dCollision * vel->y;
-        }
-        else if (pos->y > boxMax)
-        {
-          double penetration = pos->y - boxMax;
-          force.y += -jello->kCollision * penetration;
-          force.y += -jello->dCollision * vel->y;
-        }
-
-        // Z-axis
-        if (pos->z < boxMin)
-        {
-          double penetration = boxMin - pos->z;
-          force.z += jello->kCollision * penetration;
-          force.z += -jello->dCollision * vel->z;
-        }
-        else if (pos->z > boxMax)
-        {
-          double penetration = pos->z - boxMax;
-          force.z += -jello->kCollision * penetration;
-          force.z += -jello->dCollision * vel->z;
-        }
-
-        // Inclined plane collision
-        // Plane equation: a*x + b*y + c*z + d = 0
-        // Normal vector is (a, b, c)
-        // F(x,y,z) > 0 on one side, F(x,y,z) < 0 on the other
-        // Cube starts at (0,0,0) to (1,1,1), assume it starts on F > 0 side
-        if (jello->incPlanePresent == 1)
-        {
-          // Compute signed distance to plane (not normalized)
-          double F = jello->a * pos->x + jello->b * pos->y + jello->c * pos->z + jello->d;
-
-          // Compute normal length for normalization
-          double normalLength = sqrt(jello->a * jello->a + jello->b * jello->b + jello->c * jello->c);
-
-          // If F < 0, point has penetrated the plane
-          if (F < 0 && normalLength > 1e-10)
-          {
-            // Penetration depth (positive value)
-            double penetration = -F / normalLength;
-
-            // Unit normal pointing toward valid region (F > 0 side)
-            double nx = jello->a / normalLength;
-            double ny = jello->b / normalLength;
-            double nz = jello->c / normalLength;
-
-            // Collision spring force: pushes point back to valid side
-            // F = k * penetration * normal
-            force.x += jello->kCollision * penetration * nx;
-            force.y += jello->kCollision * penetration * ny;
-            force.z += jello->kCollision * penetration * nz;
-
-            // Damping: damp velocity component toward the plane
-            // F = -d * (v · n) * n
-            double vDotN = vel->x * nx + vel->y * ny + vel->z * nz;
-            force.x += -jello->dCollision * vDotN * nx;
-            force.y += -jello->dCollision * vDotN * ny;
-            force.z += -jello->dCollision * vDotN * nz;
-          }
-        }
-
-        // Convert force to acceleration: a = F / m
-        pMULTIPLY(force, 1.0 / jello->mass, a[i][j][k]);
       }
+
+      // Shear springs: face diagonals
+      double restShearFace = sqrt(2.0) / 7.0;
+
+      int shearFaceOffsets[12][3] = {
+        {-1, -1, 0}, {-1, 1, 0}, {1, -1, 0}, {1, 1, 0},
+        {-1, 0, -1}, {-1, 0, 1}, {1, 0, -1}, {1, 0, 1},
+        {0, -1, -1}, {0, -1, 1}, {0, 1, -1}, {0, 1, 1}
+      };
+
+      for (int s = 0; s < 12; s++)
+      {
+        int ni = i + shearFaceOffsets[s][0];
+        int nj = j + shearFaceOffsets[s][1];
+        int nk = k + shearFaceOffsets[s][2];
+
+        if (ni >= 0 && ni <= 7 && nj >= 0 && nj <= 7 && nk >= 0 && nk <= 7)
+        {
+          computeSpringForce(&jello->p[i][j][k], &jello->p[ni][nj][nk],
+                             &jello->v[i][j][k], &jello->v[ni][nj][nk],
+                             jello->kElastic, jello->dElastic,
+                             restShearFace, &force);
+        }
+      }
+
+      // Shear springs: body diagonals
+      double restShearBody = sqrt(3.0) / 7.0;
+
+      int shearBodyOffsets[8][3] = {
+        {-1, -1, -1}, {-1, -1, 1}, {-1, 1, -1}, {-1, 1, 1},
+        {1, -1, -1}, {1, -1, 1}, {1, 1, -1}, {1, 1, 1}
+      };
+
+      for (int s = 0; s < 8; s++)
+      {
+        int ni = i + shearBodyOffsets[s][0];
+        int nj = j + shearBodyOffsets[s][1];
+        int nk = k + shearBodyOffsets[s][2];
+
+        if (ni >= 0 && ni <= 7 && nj >= 0 && nj <= 7 && nk >= 0 && nk <= 7)
+        {
+          computeSpringForce(&jello->p[i][j][k], &jello->p[ni][nj][nk],
+                             &jello->v[i][j][k], &jello->v[ni][nj][nk],
+                             jello->kElastic, jello->dElastic,
+                             restShearBody, &force);
+        }
+      }
+
+      // Bend springs: neighbors 2 steps away
+      double restBend = 2.0 / 7.0;
+
+      int bendOffsets[6][3] = {
+        {-2, 0, 0}, {2, 0, 0},
+        {0, -2, 0}, {0, 2, 0},
+        {0, 0, -2}, {0, 0, 2}
+      };
+
+      for (int s = 0; s < 6; s++)
+      {
+        int ni = i + bendOffsets[s][0];
+        int nj = j + bendOffsets[s][1];
+        int nk = k + bendOffsets[s][2];
+
+        if (ni >= 0 && ni <= 7 && nj >= 0 && nj <= 7 && nk >= 0 && nk <= 7)
+        {
+          computeSpringForce(&jello->p[i][j][k], &jello->p[ni][nj][nk],
+                             &jello->v[i][j][k], &jello->v[ni][nj][nk],
+                             jello->kElastic, jello->dElastic,
+                             restBend, &force);
+        }
+      }
+
+      // 3. Collision forces
+
+      // Bounding box collision: box spans -2 to +2
+      double boxMin = -2.0;
+      double boxMax = 2.0;
+
+      struct point * pos = &jello->p[i][j][k];
+      struct point * vel = &jello->v[i][j][k];
+
+      // X-axis
+      if (pos->x < boxMin)
+      {
+        double penetration = boxMin - pos->x;
+        force.x += jello->kCollision * penetration;
+        force.x += -jello->dCollision * vel->x;
+      }
+      else if (pos->x > boxMax)
+      {
+        double penetration = pos->x - boxMax;
+        force.x += -jello->kCollision * penetration;
+        force.x += -jello->dCollision * vel->x;
+      }
+
+      // Y-axis
+      if (pos->y < boxMin)
+      {
+        double penetration = boxMin - pos->y;
+        force.y += jello->kCollision * penetration;
+        force.y += -jello->dCollision * vel->y;
+      }
+      else if (pos->y > boxMax)
+      {
+        double penetration = pos->y - boxMax;
+        force.y += -jello->kCollision * penetration;
+        force.y += -jello->dCollision * vel->y;
+      }
+
+      // Z-axis
+      if (pos->z < boxMin)
+      {
+        double penetration = boxMin - pos->z;
+        force.z += jello->kCollision * penetration;
+        force.z += -jello->dCollision * vel->z;
+      }
+      else if (pos->z > boxMax)
+      {
+        double penetration = pos->z - boxMax;
+        force.z += -jello->kCollision * penetration;
+        force.z += -jello->dCollision * vel->z;
+      }
+
+      // Inclined plane collision
+      if (jello->incPlanePresent == 1)
+      {
+        double F = jello->a * pos->x + jello->b * pos->y + jello->c * pos->z + jello->d;
+        double normalLength = sqrt(jello->a * jello->a + jello->b * jello->b + jello->c * jello->c);
+
+        if (F < 0 && normalLength > 1e-10)
+        {
+          double penetration = -F / normalLength;
+          double nx = jello->a / normalLength;
+          double ny = jello->b / normalLength;
+          double nz = jello->c / normalLength;
+
+          force.x += jello->kCollision * penetration * nx;
+          force.y += jello->kCollision * penetration * ny;
+          force.z += jello->kCollision * penetration * nz;
+
+          double vDotN = vel->x * nx + vel->y * ny + vel->z * nz;
+          force.x += -jello->dCollision * vDotN * nx;
+          force.y += -jello->dCollision * vDotN * ny;
+          force.z += -jello->dCollision * vDotN * nz;
+        }
+      }
+
+      // Convert force to acceleration: a = F / m
+      pMULTIPLY(force, 1.0 / jello->mass, a[i][j][k]);
+    }
+  });
 }
 
 /* performs one step of Euler Integration */
@@ -403,7 +420,7 @@ void Euler(struct world * jello)
   point a[8][8][8];
 
   computeAcceleration(jello, a);
-  
+
   for (i=0; i<=7; i++)
     for (j=0; j<=7; j++)
       for (k=0; k<=7; k++)
@@ -414,7 +431,6 @@ void Euler(struct world * jello)
         jello->v[i][j][k].x += jello->dt * a[i][j][k].x;
         jello->v[i][j][k].y += jello->dt * a[i][j][k].y;
         jello->v[i][j][k].z += jello->dt * a[i][j][k].z;
-
       }
 }
 
@@ -422,13 +438,12 @@ void Euler(struct world * jello)
 /* as a result, updates the jello structure */
 void RK4(struct world * jello)
 {
-  point F1p[8][8][8], F1v[8][8][8], 
+  point F1p[8][8][8], F1v[8][8][8],
         F2p[8][8][8], F2v[8][8][8],
         F3p[8][8][8], F3v[8][8][8],
         F4p[8][8][8], F4v[8][8][8];
 
   point a[8][8][8];
-
 
   struct world buffer;
 
@@ -456,9 +471,7 @@ void RK4(struct world * jello)
     for (j=0; j<=7; j++)
       for (k=0; k<=7; k++)
       {
-         // F2p = dt * buffer.v;
          pMULTIPLY(buffer.v[i][j][k],jello->dt,F2p[i][j][k]);
-         // F2v = dt * a(buffer.p,buffer.v);     
          pMULTIPLY(a[i][j][k],jello->dt,F2v[i][j][k]);
          pMULTIPLY(F2p[i][j][k],0.5,buffer.p[i][j][k]);
          pMULTIPLY(F2v[i][j][k],0.5,buffer.v[i][j][k]);
@@ -472,26 +485,21 @@ void RK4(struct world * jello)
     for (j=0; j<=7; j++)
       for (k=0; k<=7; k++)
       {
-         // F3p = dt * buffer.v;
          pMULTIPLY(buffer.v[i][j][k],jello->dt,F3p[i][j][k]);
-         // F3v = dt * a(buffer.p,buffer.v);     
          pMULTIPLY(a[i][j][k],jello->dt,F3v[i][j][k]);
          pMULTIPLY(F3p[i][j][k],1.0,buffer.p[i][j][k]);
          pMULTIPLY(F3v[i][j][k],1.0,buffer.v[i][j][k]);
          pSUM(jello->p[i][j][k],buffer.p[i][j][k],buffer.p[i][j][k]);
          pSUM(jello->v[i][j][k],buffer.v[i][j][k],buffer.v[i][j][k]);
       }
-         
-  computeAcceleration(&buffer, a);
 
+  computeAcceleration(&buffer, a);
 
   for (i=0; i<=7; i++)
     for (j=0; j<=7; j++)
       for (k=0; k<=7; k++)
       {
-         // F3p = dt * buffer.v;
          pMULTIPLY(buffer.v[i][j][k],jello->dt,F4p[i][j][k]);
-         // F3v = dt * a(buffer.p,buffer.v);     
          pMULTIPLY(a[i][j][k],jello->dt,F4v[i][j][k]);
 
          pMULTIPLY(F2p[i][j][k],2,buffer.p[i][j][k]);
@@ -511,5 +519,5 @@ void RK4(struct world * jello)
          pSUM(buffer.p[i][j][k],jello->v[i][j][k],jello->v[i][j][k]);
       }
 
-  return;  
+  return;
 }
