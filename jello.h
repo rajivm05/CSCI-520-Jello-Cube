@@ -40,6 +40,9 @@ struct point
 // these variables control what is displayed on the screen
 extern int shear, bend, structural, pause, viewingMode, saveScreenToFile;
 
+// texture mode: 0 = off, 1+ = different procedural textures
+extern int textureMode;
+
 struct world
 {
   char integrator[10]; // "RK4" or "Euler"

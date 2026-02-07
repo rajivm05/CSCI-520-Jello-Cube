@@ -133,6 +133,10 @@ void keyboardFunc (unsigned char key, int x, int y)
     case ' ':
       saveScreenToFile = 1 - saveScreenToFile;
       break;
+
+    case 't':
+      textureMode = (textureMode + 1) % 2;  // cycle through 0 (off) and 1 (Fresnel)
+      break;
   }
 }
 

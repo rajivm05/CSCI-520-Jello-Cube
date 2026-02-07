@@ -31,6 +31,9 @@ int sprite=0;
 // these variables control what is displayed on screen
 int shear=0, bend=0, structural=1, pause=0, viewingMode=0, saveScreenToFile=0;
 
+// texture mode: 0 = off (default material), 1 = Fresnel effect
+int textureMode = 0;
+
 struct world jello;
 
 int windowWidth, windowHeight;
