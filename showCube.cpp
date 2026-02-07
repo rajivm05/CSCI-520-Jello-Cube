@@ -230,6 +230,127 @@ void showCube(struct world * jello)
   glFrontFace(GL_CCW);
 }
 
+void showInclinedPlane(struct world * jello)
+{
+  if (jello->incPlanePresent == 0)
+    return;
+
+  double a = jello->a, b = jello->b, c = jello->c, d = jello->d;
+
+  // Bounding box corners
+  double bMin = -2.0, bMax = 2.0;
+  double verts[8][3] = {
+    {bMin,bMin,bMin}, {bMax,bMin,bMin}, {bMin,bMax,bMin}, {bMax,bMax,bMin},
+    {bMin,bMin,bMax}, {bMax,bMin,bMax}, {bMin,bMax,bMax}, {bMax,bMax,bMax}
+  };
+
+  // 12 edges of the bounding box (pairs of vertex indices)
+  int edges[12][2] = {
+    {0,1}, {2,3}, {4,5}, {6,7},   // along x
+    {0,2}, {1,3}, {4,6}, {5,7},   // along y
+    {0,4}, {1,5}, {2,6}, {3,7}    // along z
+  };
+
+  // Find intersection points: vertices on the plane + edge crossings
+  double pts[20][3];
+  int numPts = 0;
+
+  // First, add any bounding box vertices that lie on the plane
+  for (int v = 0; v < 8; v++)
+  {
+    double f = a*verts[v][0] + b*verts[v][1] + c*verts[v][2] + d;
+    if (fabs(f) < 1e-6)
+    {
+      pts[numPts][0] = verts[v][0];
+      pts[numPts][1] = verts[v][1];
+      pts[numPts][2] = verts[v][2];
+      numPts++;
+    }
+  }
+
+  // Then, add strict edge crossings (both endpoints off the plane, opposite sides)
+  for (int e = 0; e < 12; e++)
+  {
+    double *p1 = verts[edges[e][0]];
+    double *p2 = verts[edges[e][1]];
+
+    double f1 = a*p1[0] + b*p1[1] + c*p1[2] + d;
+    double f2 = a*p2[0] + b*p2[1] + c*p2[2] + d;
+
+    // Only strict crossings (neither endpoint on plane)
+    if (f1 * f2 < 0)
+    {
+      double t = f1 / (f1 - f2);
+      pts[numPts][0] = p1[0] + t*(p2[0]-p1[0]);
+      pts[numPts][1] = p1[1] + t*(p2[1]-p1[1]);
+      pts[numPts][2] = p1[2] + t*(p2[2]-p1[2]);
+      numPts++;
+    }
+  }
+
+  if (numPts < 3)
+    return;
+
+  // Compute centroid of intersection polygon
+  double cx=0, cy=0, cz=0;
+  for (int i = 0; i < numPts; i++)
+  { cx += pts[i][0]; cy += pts[i][1]; cz += pts[i][2]; }
+  cx /= numPts; cy /= numPts; cz /= numPts;
+
+  // Sort vertices by angle around centroid (needed for correct polygon winding)
+  double nLen = sqrt(a*a + b*b + c*c);
+  double nx = a/nLen, ny = b/nLen, nz = c/nLen;
+
+  // Reference direction: centroid to first point
+  double refX = pts[0][0]-cx, refY = pts[0][1]-cy, refZ = pts[0][2]-cz;
+
+  double angles[12];
+  for (int i = 0; i < numPts; i++)
+  {
+    double dx = pts[i][0]-cx, dy = pts[i][1]-cy, dz = pts[i][2]-cz;
+    double dot = dx*refX + dy*refY + dz*refZ;
+    // Cross product projected onto plane normal gives sin component
+    double crossDotN = (refY*dz - refZ*dy)*nx
+                     + (refZ*dx - refX*dz)*ny
+                     + (refX*dy - refY*dx)*nz;
+    angles[i] = atan2(crossDotN, dot);
+  }
+
+  // Sort by angle (bubble sort, max 12 points)
+  for (int i = 0; i < numPts-1; i++)
+    for (int j = i+1; j < numPts; j++)
+      if (angles[j] < angles[i])
+      {
+        double tmp;
+        tmp = angles[i]; angles[i] = angles[j]; angles[j] = tmp;
+        tmp = pts[i][0]; pts[i][0] = pts[j][0]; pts[j][0] = tmp;
+        tmp = pts[i][1]; pts[i][1] = pts[j][1]; pts[j][1] = tmp;
+        tmp = pts[i][2]; pts[i][2] = pts[j][2]; pts[j][2] = tmp;
+      }
+
+  // Render filled polygon (semi-transparent)
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glDisable(GL_CULL_FACE);
+
+  glColor4f(0.8, 0.6, 0.2, 0.4);
+  glBegin(GL_POLYGON);
+  for (int i = 0; i < numPts; i++)
+    glVertex3f(pts[i][0], pts[i][1], pts[i][2]);
+  glEnd();
+
+  // Render outline
+  glLineWidth(2);
+  glColor4f(0.9, 0.7, 0.2, 0.9);
+  glBegin(GL_LINE_LOOP);
+  for (int i = 0; i < numPts; i++)
+    glVertex3f(pts[i][0], pts[i][1], pts[i][2]);
+  glEnd();
+
+  glEnable(GL_CULL_FACE);
+  glDisable(GL_BLEND);
+}
+
 void showBoundingBox()
 {
   int i,j;
@@ -285,7 +406,7 @@ void showBoundingBox()
     glVertex3f(2,-2,j);
     glVertex3f(2,2,j);
   }
-  
+
   glEnd();
 
   return;

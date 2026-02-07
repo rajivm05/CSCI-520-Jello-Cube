@@ -186,7 +186,10 @@ void display()
 
   // show the bounding box
   showBoundingBox();
- 
+
+  // show the inclined plane (if present)
+  showInclinedPlane(&jello);
+
   glutSwapBuffers();
 }
 
