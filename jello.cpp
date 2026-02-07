@@ -13,6 +13,8 @@
 #include "input.h"
 #include "physics.h"
 
+#include <sys/time.h>
+
 // camera parameters
 double Theta = pi / 6;
 double Phi = pi / 6;
@@ -32,6 +34,53 @@ int shear=0, bend=0, structural=1, pause=0, viewingMode=0, saveScreenToFile=0;
 struct world jello;
 
 int windowWidth, windowHeight;
+
+// FPS tracking
+double currentFPS = 0.0;
+struct timeval lastTime;
+int frameCount = 0;
+
+double getTimeInSeconds()
+{
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return tv.tv_sec + tv.tv_usec / 1000000.0;
+}
+
+void renderFPS()
+{
+  // Switch to 2D orthographic projection
+  glMatrixMode(GL_PROJECTION);
+  glPushMatrix();
+  glLoadIdentity();
+  gluOrtho2D(0, windowWidth, 0, windowHeight);
+
+  glMatrixMode(GL_MODELVIEW);
+  glPushMatrix();
+  glLoadIdentity();
+
+  glDisable(GL_LIGHTING);
+  glDisable(GL_DEPTH_TEST);
+
+  // Render FPS text in top-left corner
+  glColor3f(1.0, 1.0, 1.0);
+  glRasterPos2i(10, windowHeight - 20);
+
+  char fpsText[32];
+  sprintf(fpsText, "FPS: %.1f", currentFPS);
+
+  for (char *c = fpsText; *c != '\0'; c++)
+    glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+
+  glEnable(GL_DEPTH_TEST);
+  glEnable(GL_LIGHTING);
+
+  // Restore matrices
+  glMatrixMode(GL_PROJECTION);
+  glPopMatrix();
+  glMatrixMode(GL_MODELVIEW);
+  glPopMatrix();
+}
 
 void myinit()
 {
@@ -190,14 +239,39 @@ void display()
   // show the inclined plane (if present)
   showInclinedPlane(&jello);
 
+  // show FPS counter
+  renderFPS();
+
   glutSwapBuffers();
 }
 
 void doIdle()
 {
+  // FPS calculation at the start of idle handler
+  static double lastFrameTime = 0.0;
+  static int fpsFrameCount = 0;
+  static double fpsAccumTime = 0.0;
+
+  double currentTime = getTimeInSeconds();
+  if (lastFrameTime > 0.0)
+  {
+    double elapsed = currentTime - lastFrameTime;
+    fpsAccumTime += elapsed;
+    fpsFrameCount++;
+
+    // Update FPS every 0.5 seconds for stable display
+    if (fpsAccumTime >= 0.5)
+    {
+      currentFPS = fpsFrameCount / fpsAccumTime;
+      fpsFrameCount = 0;
+      fpsAccumTime = 0.0;
+    }
+  }
+  lastFrameTime = currentTime;
+
   char s[20]="picxxxx.ppm";
   int i;
-  
+
   // save screen to file
   s[3] = 48 + (sprite / 1000);
   s[4] = 48 + (sprite % 1000) / 100;
