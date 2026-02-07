@@ -406,6 +406,14 @@ void computeAcceleration(struct world * jello, struct point a[8][8][8])
         }
       }
 
+      // 4. Click force (user interaction)
+      if (clickForceActive && i == clickForceI && j == clickForceJ && k == clickForceK)
+      {
+        force.x += clickForceMagnitude * clickForceDirX;
+        force.y += clickForceMagnitude * clickForceDirY;
+        force.z += clickForceMagnitude * clickForceDirZ;
+      }
+
       // Convert force to acceleration: a = F / m
       pMULTIPLY(force, 1.0 / jello->mass, a[i][j][k]);
     }

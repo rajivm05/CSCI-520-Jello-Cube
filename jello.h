@@ -43,6 +43,15 @@ extern int shear, bend, structural, pause, viewingMode, saveScreenToFile;
 // texture mode: 0 = off, 1+ = different procedural textures
 extern int textureMode;
 
+// window dimensions
+extern int windowWidth, windowHeight;
+
+// Click force: applied to a specific control point
+extern int clickForceActive;           // 1 if force is being applied, 0 otherwise
+extern int clickForceI, clickForceJ, clickForceK;  // target point indices
+extern double clickForceDirX, clickForceDirY, clickForceDirZ;  // force direction
+extern double clickForceMagnitude;     // force magnitude (decays over time)
+
 struct world
 {
   char integrator[10]; // "RK4" or "Euler"

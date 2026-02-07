@@ -34,6 +34,12 @@ int shear=0, bend=0, structural=1, pause=0, viewingMode=0, saveScreenToFile=0;
 // texture mode: 0 = off (default material), 1 = Fresnel effect
 int textureMode = 0;
 
+// Click force variables
+int clickForceActive = 0;
+int clickForceI = 0, clickForceJ = 0, clickForceK = 0;
+double clickForceDirX = 0, clickForceDirY = 0, clickForceDirZ = 0;
+double clickForceMagnitude = 0;
+
 struct world jello;
 
 int windowWidth, windowHeight;
@@ -302,6 +308,17 @@ void doIdle()
         RK4(&jello);
       else if (strcmp(jello.integrator, "Euler") == 0)
         Euler(&jello);
+    }
+
+    // Decay click force over time
+    if (clickForceActive)
+    {
+      clickForceMagnitude *= 0.9;  // Exponential decay
+      if (clickForceMagnitude < 0.01)
+      {
+        clickForceActive = 0;
+        clickForceMagnitude = 0;
+      }
     }
 
     // Blow-up detection: check if any point has gone too far

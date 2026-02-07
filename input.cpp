@@ -66,13 +66,228 @@ void mouseMotion (int x, int y)
   g_vMousePos[1] = y;
 }
 
+// Compute the axis-aligned bounding box of the jello cube
+void getJelloBoundingBox(double *minX, double *maxX, double *minY, double *maxY, double *minZ, double *maxZ)
+{
+  *minX = *minY = *minZ = 1e10;
+  *maxX = *maxY = *maxZ = -1e10;
+
+  for (int i = 0; i <= 7; i++)
+    for (int j = 0; j <= 7; j++)
+      for (int k = 0; k <= 7; k++)
+      {
+        if (jello.p[i][j][k].x < *minX) *minX = jello.p[i][j][k].x;
+        if (jello.p[i][j][k].x > *maxX) *maxX = jello.p[i][j][k].x;
+        if (jello.p[i][j][k].y < *minY) *minY = jello.p[i][j][k].y;
+        if (jello.p[i][j][k].y > *maxY) *maxY = jello.p[i][j][k].y;
+        if (jello.p[i][j][k].z < *minZ) *minZ = jello.p[i][j][k].z;
+        if (jello.p[i][j][k].z > *maxZ) *maxZ = jello.p[i][j][k].z;
+      }
+}
+
+// Ray-AABB intersection test
+// Returns intersection distance t (negative if no intersection)
+// hitPoint will contain the intersection point if t >= 0
+double rayIntersectsAABB(double rayOrigX, double rayOrigY, double rayOrigZ,
+                         double rayDirX, double rayDirY, double rayDirZ,
+                         double minX, double maxX, double minY, double maxY, double minZ, double maxZ,
+                         double *hitX, double *hitY, double *hitZ)
+{
+  double tmin = -1e10, tmax = 1e10;
+
+  // X slab
+  if (fabs(rayDirX) > 1e-10)
+  {
+    double t1 = (minX - rayOrigX) / rayDirX;
+    double t2 = (maxX - rayOrigX) / rayDirX;
+    if (t1 > t2) { double tmp = t1; t1 = t2; t2 = tmp; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+  }
+  else if (rayOrigX < minX || rayOrigX > maxX)
+    return -1.0;
+
+  // Y slab
+  if (fabs(rayDirY) > 1e-10)
+  {
+    double t1 = (minY - rayOrigY) / rayDirY;
+    double t2 = (maxY - rayOrigY) / rayDirY;
+    if (t1 > t2) { double tmp = t1; t1 = t2; t2 = tmp; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+  }
+  else if (rayOrigY < minY || rayOrigY > maxY)
+    return -1.0;
+
+  // Z slab
+  if (fabs(rayDirZ) > 1e-10)
+  {
+    double t1 = (minZ - rayOrigZ) / rayDirZ;
+    double t2 = (maxZ - rayOrigZ) / rayDirZ;
+    if (t1 > t2) { double tmp = t1; t1 = t2; t2 = tmp; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+  }
+  else if (rayOrigZ < minZ || rayOrigZ > maxZ)
+    return -1.0;
+
+  if (tmax < tmin || tmax < 0)
+    return -1.0;
+
+  // Use tmin if in front of camera, otherwise tmax
+  double t = (tmin >= 0) ? tmin : tmax;
+
+  // Compute hit point
+  *hitX = rayOrigX + t * rayDirX;
+  *hitY = rayOrigY + t * rayDirY;
+  *hitZ = rayOrigZ + t * rayDirZ;
+
+  return t;
+}
+
+// Find the closest surface control point to a given world position
+// Returns indices via pointers
+void findClosestSurfacePoint(double hitX, double hitY, double hitZ,
+                             int *bestI, int *bestJ, int *bestK)
+{
+  double minDist = 1e10;
+  *bestI = *bestJ = *bestK = 0;
+
+  for (int i = 0; i <= 7; i++)
+    for (int j = 0; j <= 7; j++)
+      for (int k = 0; k <= 7; k++)
+      {
+        // Only consider surface points (at least one index is 0 or 7)
+        if (i != 0 && i != 7 && j != 0 && j != 7 && k != 0 && k != 7)
+          continue;
+
+        double dx = jello.p[i][j][k].x - hitX;
+        double dy = jello.p[i][j][k].y - hitY;
+        double dz = jello.p[i][j][k].z - hitZ;
+        double dist = dx*dx + dy*dy + dz*dz;
+
+        if (dist < minDist)
+        {
+          minDist = dist;
+          *bestI = i;
+          *bestJ = j;
+          *bestK = k;
+        }
+      }
+}
+
+// Set up click force to be applied in physics loop
+void applyClickForce(int i, int j, int k, double dirX, double dirY, double dirZ, double magnitude)
+{
+  clickForceActive = 1;
+  clickForceI = i;
+  clickForceJ = j;
+  clickForceK = k;
+  clickForceDirX = dirX;
+  clickForceDirY = dirY;
+  clickForceDirZ = dirZ;
+  clickForceMagnitude = magnitude;
+}
+
+// Convert screen coordinates to world ray
+void screenToWorldRay(int screenX, int screenY,
+                      double *rayOrigX, double *rayOrigY, double *rayOrigZ,
+                      double *rayDirX, double *rayDirY, double *rayDirZ)
+{
+  // Camera position (same as in display())
+  double camX = R * cos(Phi) * cos(Theta);
+  double camY = R * sin(Phi) * cos(Theta);
+  double camZ = R * sin(Theta);
+
+  // Camera looks at origin
+  double lookX = 0.0, lookY = 0.0, lookZ = 0.0;
+
+  // Up vector
+  double upX = 0.0, upY = 0.0, upZ = 1.0;
+
+  // Compute camera basis vectors
+  double forwardX = lookX - camX;
+  double forwardY = lookY - camY;
+  double forwardZ = lookZ - camZ;
+  double fLen = sqrt(forwardX*forwardX + forwardY*forwardY + forwardZ*forwardZ);
+  forwardX /= fLen; forwardY /= fLen; forwardZ /= fLen;
+
+  // Right = forward x up
+  double rightX = forwardY * upZ - forwardZ * upY;
+  double rightY = forwardZ * upX - forwardX * upZ;
+  double rightZ = forwardX * upY - forwardY * upX;
+  double rLen = sqrt(rightX*rightX + rightY*rightY + rightZ*rightZ);
+  rightX /= rLen; rightY /= rLen; rightZ /= rLen;
+
+  // Recompute up = right x forward
+  double trueUpX = rightY * forwardZ - rightZ * forwardY;
+  double trueUpY = rightZ * forwardX - rightX * forwardZ;
+  double trueUpZ = rightX * forwardY - rightY * forwardX;
+
+  // Convert screen coords to normalized device coords (-1 to 1)
+  double ndcX = (2.0 * screenX / windowWidth) - 1.0;
+  double ndcY = 1.0 - (2.0 * screenY / windowHeight);  // flip Y
+
+  // Field of view (60 degrees from reshape())
+  double fovY = 60.0 * pi / 180.0;
+  double aspect = (double)windowWidth / windowHeight;
+  double tanHalfFovY = tan(fovY / 2.0);
+
+  // Ray direction in world space
+  *rayDirX = forwardX + ndcX * aspect * tanHalfFovY * rightX + ndcY * tanHalfFovY * trueUpX;
+  *rayDirY = forwardY + ndcX * aspect * tanHalfFovY * rightY + ndcY * tanHalfFovY * trueUpY;
+  *rayDirZ = forwardZ + ndcX * aspect * tanHalfFovY * rightZ + ndcY * tanHalfFovY * trueUpZ;
+
+  // Normalize ray direction
+  double dLen = sqrt((*rayDirX)*(*rayDirX) + (*rayDirY)*(*rayDirY) + (*rayDirZ)*(*rayDirZ));
+  *rayDirX /= dLen; *rayDirY /= dLen; *rayDirZ /= dLen;
+
+  // Ray origin is camera position
+  *rayOrigX = camX;
+  *rayOrigY = camY;
+  *rayOrigZ = camZ;
+}
+
 void mouseButton(int button, int state, int x, int y)
 {
   switch (button)
   {
     case GLUT_LEFT_BUTTON:
       g_iLeftMouseButton = (state==GLUT_DOWN);
+
+      // Check for click on jello cube and apply force
+      if (state == GLUT_DOWN)
+      {
+        double rayOrigX, rayOrigY, rayOrigZ;
+        double rayDirX, rayDirY, rayDirZ;
+        screenToWorldRay(x, y, &rayOrigX, &rayOrigY, &rayOrigZ,
+                         &rayDirX, &rayDirY, &rayDirZ);
+
+        double minX, maxX, minY, maxY, minZ, maxZ;
+        getJelloBoundingBox(&minX, &maxX, &minY, &maxY, &minZ, &maxZ);
+
+        double hitX, hitY, hitZ;
+        double t = rayIntersectsAABB(rayOrigX, rayOrigY, rayOrigZ,
+                                     rayDirX, rayDirY, rayDirZ,
+                                     minX, maxX, minY, maxY, minZ, maxZ,
+                                     &hitX, &hitY, &hitZ);
+
+        if (t >= 0)
+        {
+          // Find closest surface point to hit location
+          int hitI, hitJ, hitK;
+          findClosestSurfacePoint(hitX, hitY, hitZ, &hitI, &hitJ, &hitK);
+
+          // Apply impulse force in ray direction
+          double forceMagnitude = 10.0;  // Adjust this value to control force strength
+          applyClickForce(hitI, hitJ, hitK, rayDirX, rayDirY, rayDirZ, forceMagnitude);
+
+          printf("Force applied on cube at point [%d][%d][%d], hit=(%.2f, %.2f, %.2f)\n",
+                 hitI, hitJ, hitK, hitX, hitY, hitZ);
+        }
+      }
       break;
+
     case GLUT_MIDDLE_BUTTON:
       g_iMiddleMouseButton = (state==GLUT_DOWN);
       break;
@@ -80,7 +295,7 @@ void mouseButton(int button, int state, int x, int y)
       g_iRightMouseButton = (state==GLUT_DOWN);
       break;
   }
- 
+
   g_vMousePos[0] = x;
   g_vMousePos[1] = y;
 }
