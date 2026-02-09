@@ -7,6 +7,7 @@
 
 #include "jello.h"
 #include "showCube.h"
+#include "procedural_textures.h"
 
 int pointMap(int side, int i, int j)
 {
@@ -155,8 +156,8 @@ void showCube(struct world * jello)
   {
     glPolygonMode(GL_FRONT, GL_FILL);
 
-    // Enable blending and color material for Fresnel effect
-    if (textureMode == 1)
+    // Enable blending and color material for procedural textures
+    if (textureMode > 0 && textureModeNeedsBlending(textureMode))
     {
       glEnable(GL_BLEND);
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -228,24 +229,13 @@ void showCube(struct world * jello)
             double ny1 = normal[i][j].y / counter[i][j];
             double nz1 = normal[i][j].z / counter[i][j];
 
-            if (textureMode == 1)
+            if (textureMode > 0)
             {
-              // Fresnel effect: compute view direction and apply per-vertex color
-              double vx = R * cos(Phi) * cos(Theta) - NODE(face,i,j).x;
-              double vy = R * sin(Phi) * cos(Theta) - NODE(face,i,j).y;
-              double vz = R * sin(Theta) - NODE(face,i,j).z;
-              double vLen = sqrt(vx*vx + vy*vy + vz*vz);
-              if (vLen > 0) { vx /= vLen; vy /= vLen; vz /= vLen; }
-
-              double NdotV = fabs(nx1*vx + ny1*vy + nz1*vz);
-              // Fresnel: edges (NdotV~0) are more opaque, center (NdotV~1) more transparent
-              double fresnel = pow(1.0 - NdotV, 3.0);
-
-              // Blend between translucent center (red) and opaque edge (bright red/white)
-              float r = 0.9f + 0.1f * fresnel;
-              float g = 0.1f + 0.6f * fresnel;
-              float b = 0.1f + 0.5f * fresnel;
-              float a = 0.4f + 0.5f * fresnel;
+              float r, g, b, a;
+              computeProceduralColor(textureMode,
+                                     NODE(face,i,j).x, NODE(face,i,j).y, NODE(face,i,j).z,
+                                     nx1, ny1, nz1,
+                                     &r, &g, &b, &a);
               glColor4f(r, g, b, a);
             }
 
@@ -257,21 +247,13 @@ void showCube(struct world * jello)
             double ny2 = normal[i][j-1].y / counter[i][j-1];
             double nz2 = normal[i][j-1].z / counter[i][j-1];
 
-            if (textureMode == 1)
+            if (textureMode > 0)
             {
-              double vx = R * cos(Phi) * cos(Theta) - NODE(face,i,j-1).x;
-              double vy = R * sin(Phi) * cos(Theta) - NODE(face,i,j-1).y;
-              double vz = R * sin(Theta) - NODE(face,i,j-1).z;
-              double vLen = sqrt(vx*vx + vy*vy + vz*vz);
-              if (vLen > 0) { vx /= vLen; vy /= vLen; vz /= vLen; }
-
-              double NdotV = fabs(nx2*vx + ny2*vy + nz2*vz);
-              double fresnel = pow(1.0 - NdotV, 3.0);
-
-              float r = 0.9f + 0.1f * fresnel;
-              float g = 0.1f + 0.6f * fresnel;
-              float b = 0.1f + 0.5f * fresnel;
-              float a = 0.4f + 0.5f * fresnel;
+              float r, g, b, a;
+              computeProceduralColor(textureMode,
+                                     NODE(face,i,j-1).x, NODE(face,i,j-1).y, NODE(face,i,j-1).z,
+                                     nx2, ny2, nz2,
+                                     &r, &g, &b, &a);
               glColor4f(r, g, b, a);
             }
 
@@ -284,8 +266,8 @@ void showCube(struct world * jello)
         
     }
 
-    // Disable blending and color material after Fresnel rendering
-    if (textureMode == 1)
+    // Disable blending and color material after procedural texture rendering
+    if (textureMode > 0 && textureModeNeedsBlending(textureMode))
     {
       glDisable(GL_COLOR_MATERIAL);
       glDisable(GL_BLEND);

@@ -7,6 +7,7 @@
 
 #include "jello.h"
 #include "input.h"
+#include "procedural_textures.h"
 
 /* Write a screenshot, in the PPM format, to the specified filename, in PPM format */
 void saveScreenshot(int windowWidth, int windowHeight, char *filename)
@@ -135,7 +136,8 @@ void keyboardFunc (unsigned char key, int x, int y)
       break;
 
     case 't':
-      textureMode = (textureMode + 1) % 2;  // cycle through 0 (off) and 1 (Fresnel)
+      textureMode = (textureMode + 1) % NUM_TEXTURE_MODES;
+      printf("Texture mode: %s\n", getTextureModeName(textureMode));
       break;
   }
 }
