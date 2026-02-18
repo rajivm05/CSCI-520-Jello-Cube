@@ -10,8 +10,8 @@
 
 #include "jello.h"
 
-// Number of available texture modes (0 = off, 1+ = textures)
-#define NUM_TEXTURE_MODES 2
+// Number of available texture modes (0 = off, 1 = Fresnel, 2 = Image texture)
+#define NUM_TEXTURE_MODES 3
 
 // Get the name of the current texture mode (for display)
 const char* getTextureModeName(int mode);

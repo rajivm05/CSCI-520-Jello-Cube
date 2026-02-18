@@ -12,6 +12,7 @@
 #include "showCube.h"
 #include "input.h"
 #include "physics.h"
+#include "texture_loader.h"
 
 #include <sys/time.h>
 
@@ -33,6 +34,10 @@ int shear=0, bend=0, structural=1, pause=0, viewingMode=0, saveScreenToFile=0;
 
 // texture mode: 0 = off (default material), 1 = Fresnel effect
 int textureMode = 0;
+
+// Fresnel color (changes on collision) - starts as red
+float fresnelBaseColor[3] = { 0.9f, 0.1f, 0.1f };
+int collisionOccurred = 0;
 
 struct world jello;
 
@@ -295,6 +300,9 @@ void doIdle()
 
   if (pause == 0)
   {
+    // Reset collision flag before physics step
+    collisionOccurred = 0;
+
     // Perform n steps of simulation per frame
     for (int step = 0; step < jello.n; step++)
     {
@@ -302,6 +310,27 @@ void doIdle()
         RK4(&jello);
       else if (strcmp(jello.integrator, "Euler") == 0)
         Euler(&jello);
+    }
+
+    // Change Fresnel color on collision
+    if (collisionOccurred)
+    {
+      static int colorIndex = 0;
+      // Color palette: red, orange, yellow, green, cyan, blue, purple, pink
+      static float colors[][3] = {
+        {0.9f, 0.1f, 0.1f},  // red
+        {0.9f, 0.5f, 0.1f},  // orange
+        {0.9f, 0.9f, 0.1f},  // yellow
+        {0.1f, 0.9f, 0.2f},  // green
+        {0.1f, 0.9f, 0.9f},  // cyan
+        {0.2f, 0.3f, 0.9f},  // blue
+        {0.7f, 0.2f, 0.9f},  // purple
+        {0.9f, 0.4f, 0.7f}   // pink
+      };
+      colorIndex = (colorIndex + 1) % 8;
+      fresnelBaseColor[0] = colors[colorIndex][0];
+      fresnelBaseColor[1] = colors[colorIndex][1];
+      fresnelBaseColor[2] = colors[colorIndex][2];
     }
 
     // Blow-up detection: check if any point has gone too far
@@ -368,6 +397,12 @@ int main (int argc, char ** argv)
 
   /* do initialization */
   myinit();
+
+  /* load jello texture */
+  if (!initJelloTexture("assets/swirls-paint-blue-liquid.jpg"))
+  {
+    printf("Warning: Could not load jello texture. Texture mode 2 will not work.\n");
+  }
 
   /* forever sink in the black hole */
   glutMainLoop();

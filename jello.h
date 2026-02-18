@@ -43,6 +43,10 @@ extern int shear, bend, structural, pause, viewingMode, saveScreenToFile;
 // texture mode: 0 = off, 1+ = different procedural textures
 extern int textureMode;
 
+// Fresnel color (changes on collision)
+extern float fresnelBaseColor[3];
+extern int collisionOccurred;
+
 struct world
 {
   char integrator[10]; // "RK4" or "Euler"

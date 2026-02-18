@@ -8,6 +8,7 @@
 #include "jello.h"
 #include "showCube.h"
 #include "procedural_textures.h"
+#include "texture_loader.h"
 
 int pointMap(int side, int i, int j)
 {
@@ -165,6 +166,15 @@ void showCube(struct world * jello)
       glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
     }
 
+    // Enable image texture mapping for mode 2
+    if (textureMode == 2 && jelloTextureID != 0)
+    {
+      glEnable(GL_TEXTURE_2D);
+      glBindTexture(GL_TEXTURE_2D, jelloTextureID);
+      // Replace color with texture (ignore material color)
+      glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+    }
+
     for (face=1; face <= 6; face++) 
       // face == face of a cube
       // 1 = bottom, 2 = front, 3 = left, 4 = right, 5 = far, 6 = top
@@ -229,14 +239,20 @@ void showCube(struct world * jello)
             double ny1 = normal[i][j].y / counter[i][j];
             double nz1 = normal[i][j].z / counter[i][j];
 
-            if (textureMode > 0)
+            if (textureMode == 1)
             {
+              // Fresnel procedural texture
               float r, g, b, a;
               computeProceduralColor(textureMode,
                                      NODE(face,i,j).x, NODE(face,i,j).y, NODE(face,i,j).z,
                                      nx1, ny1, nz1,
                                      &r, &g, &b, &a);
               glColor4f(r, g, b, a);
+            }
+            else if (textureMode == 2)
+            {
+              // Image texture - set UV coordinates
+              glTexCoord2f(i / 7.0f, j / 7.0f);
             }
 
             glNormal3f(nx1, ny1, nz1);
@@ -247,14 +263,20 @@ void showCube(struct world * jello)
             double ny2 = normal[i][j-1].y / counter[i][j-1];
             double nz2 = normal[i][j-1].z / counter[i][j-1];
 
-            if (textureMode > 0)
+            if (textureMode == 1)
             {
+              // Fresnel procedural texture
               float r, g, b, a;
               computeProceduralColor(textureMode,
                                      NODE(face,i,j-1).x, NODE(face,i,j-1).y, NODE(face,i,j-1).z,
                                      nx2, ny2, nz2,
                                      &r, &g, &b, &a);
               glColor4f(r, g, b, a);
+            }
+            else if (textureMode == 2)
+            {
+              // Image texture - set UV coordinates
+              glTexCoord2f(i / 7.0f, (j - 1) / 7.0f);
             }
 
             glNormal3f(nx2, ny2, nz2);
@@ -271,6 +293,13 @@ void showCube(struct world * jello)
     {
       glDisable(GL_COLOR_MATERIAL);
       glDisable(GL_BLEND);
+    }
+
+    // Disable image texture mapping
+    if (textureMode == 2)
+    {
+      glBindTexture(GL_TEXTURE_2D, 0);
+      glDisable(GL_TEXTURE_2D);
     }
   } // end for loop over faces
   glFrontFace(GL_CCW);

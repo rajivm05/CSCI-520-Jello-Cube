@@ -21,6 +21,7 @@ const char* getTextureModeName(int mode)
   {
     case 0:  return "Default";
     case 1:  return "Fresnel";
+    case 2:  return "Image Texture";
     default: return "Unknown";
   }
 }
@@ -56,6 +57,9 @@ static void computeViewDirection(double px, double py, double pz,
   }
 }
 
+// Fresnel base color (extern from jello.cpp)
+extern float fresnelBaseColor[3];
+
 //
 // Texture 1: Fresnel Effect
 // Edges are more opaque/bright, center is more transparent
@@ -70,10 +74,10 @@ static void computeFresnel(double px, double py, double pz,
   double NdotV = fabs(nx*vx + ny*vy + nz*vz);
   double fresnel = pow(1.0 - NdotV, 3.0);
 
-  // Blend between translucent center (red) and opaque edge (bright red/white)
-  *r = 0.9f + 0.1f * fresnel;
-  *g = 0.1f + 0.6f * fresnel;
-  *b = 0.1f + 0.5f * fresnel;
+  // Blend between translucent center (base color) and opaque edge (bright/white)
+  *r = fresnelBaseColor[0] + (1.0f - fresnelBaseColor[0]) * 0.5f * fresnel;
+  *g = fresnelBaseColor[1] + (1.0f - fresnelBaseColor[1]) * 0.8f * fresnel;
+  *b = fresnelBaseColor[2] + (1.0f - fresnelBaseColor[2]) * 0.8f * fresnel;
   *a = 0.4f + 0.5f * fresnel;
 }
 

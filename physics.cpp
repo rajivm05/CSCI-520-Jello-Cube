@@ -346,12 +346,14 @@ void computeAcceleration(struct world * jello, struct point a[8][8][8])
         double penetration = boxMin - pos->x;
         force.x += jello->kCollision * penetration;
         force.x += -jello->dCollision * vel->x;
+        collisionOccurred = 1;
       }
       else if (pos->x > boxMax)
       {
         double penetration = pos->x - boxMax;
         force.x += -jello->kCollision * penetration;
         force.x += -jello->dCollision * vel->x;
+        collisionOccurred = 1;
       }
 
       // Y-axis
@@ -360,12 +362,14 @@ void computeAcceleration(struct world * jello, struct point a[8][8][8])
         double penetration = boxMin - pos->y;
         force.y += jello->kCollision * penetration;
         force.y += -jello->dCollision * vel->y;
+        collisionOccurred = 1;
       }
       else if (pos->y > boxMax)
       {
         double penetration = pos->y - boxMax;
         force.y += -jello->kCollision * penetration;
         force.y += -jello->dCollision * vel->y;
+        collisionOccurred = 1;
       }
 
       // Z-axis
@@ -374,12 +378,14 @@ void computeAcceleration(struct world * jello, struct point a[8][8][8])
         double penetration = boxMin - pos->z;
         force.z += jello->kCollision * penetration;
         force.z += -jello->dCollision * vel->z;
+        collisionOccurred = 1;
       }
       else if (pos->z > boxMax)
       {
         double penetration = pos->z - boxMax;
         force.z += -jello->kCollision * penetration;
         force.z += -jello->dCollision * vel->z;
+        collisionOccurred = 1;
       }
 
       // Inclined plane collision
