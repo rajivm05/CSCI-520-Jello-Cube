@@ -401,10 +401,10 @@ int main (int argc, char ** argv)
   /* do initialization */
   myinit();
 
-  /* load jello texture */
-  if (!initJelloTexture("assets/swirls-paint-blue-liquid.jpg"))
+  /* load textures */
+  if (!initTextures())
   {
-    printf("Warning: Could not load jello texture. Texture mode 2 will not work.\n");
+    printf("Warning: Some textures failed to load.\n");
   }
 
   /* forever sink in the black hole */

@@ -12,8 +12,8 @@
 // Maximum texture size to avoid GPU memory issues
 #define MAX_TEXTURE_SIZE 1024
 
-// Global texture ID
-GLuint jelloTextureID = 0;
+// Texture IDs array
+GLuint textureIDs[2] = { 0, 0 };
 
 // Simple box filter downsampling
 static unsigned char* downsampleImage(unsigned char* src, int srcW, int srcH, int channels, int targetW, int targetH)
@@ -128,8 +128,17 @@ GLuint loadTexture(const char* filename)
   return textureID;
 }
 
-int initJelloTexture(const char* filename)
+int initTextures()
 {
-  jelloTextureID = loadTexture(filename);
-  return (jelloTextureID != 0) ? 1 : 0;
+  int success = 1;
+
+  // Load blue swirl texture
+  textureIDs[0] = loadTexture("assets/swirls-paint-blue-liquid.jpg");
+  if (textureIDs[0] == 0) success = 0;
+
+  // Load wood texture
+  textureIDs[1] = loadTexture("assets/wood_table_diff_4k.jpg");
+  if (textureIDs[1] == 0) success = 0;
+
+  return success;
 }

@@ -166,12 +166,17 @@ void showCube(struct world * jello)
       glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
     }
 
-    // Enable image texture mapping for mode 2
-    if (textureMode == 2 && jelloTextureID != 0)
+    // Enable image texture mapping for mode 2 (blue swirl) or mode 3 (wood)
+    if (textureMode == 2 && textureIDs[0] != 0)
     {
       glEnable(GL_TEXTURE_2D);
-      glBindTexture(GL_TEXTURE_2D, jelloTextureID);
-      // Replace color with texture (ignore material color)
+      glBindTexture(GL_TEXTURE_2D, textureIDs[0]);
+      glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+    }
+    else if (textureMode == 3 && textureIDs[1] != 0)
+    {
+      glEnable(GL_TEXTURE_2D);
+      glBindTexture(GL_TEXTURE_2D, textureIDs[1]);
       glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
     }
 
@@ -249,7 +254,7 @@ void showCube(struct world * jello)
                                      &r, &g, &b, &a);
               glColor4f(r, g, b, a);
             }
-            else if (textureMode == 2)
+            else if (textureMode == 2 || textureMode == 3)
             {
               // Image texture - set UV coordinates
               glTexCoord2f(i / 7.0f, j / 7.0f);
@@ -273,7 +278,7 @@ void showCube(struct world * jello)
                                      &r, &g, &b, &a);
               glColor4f(r, g, b, a);
             }
-            else if (textureMode == 2)
+            else if (textureMode == 2 || textureMode == 3)
             {
               // Image texture - set UV coordinates
               glTexCoord2f(i / 7.0f, (j - 1) / 7.0f);
@@ -296,7 +301,7 @@ void showCube(struct world * jello)
     }
 
     // Disable image texture mapping
-    if (textureMode == 2)
+    if (textureMode == 2 || textureMode == 3)
     {
       glBindTexture(GL_TEXTURE_2D, 0);
       glDisable(GL_TEXTURE_2D);

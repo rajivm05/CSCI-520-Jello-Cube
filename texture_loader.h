@@ -12,10 +12,10 @@
 // Returns 0 on failure
 GLuint loadTexture(const char* filename);
 
-// Global texture ID for the jello cube texture
-extern GLuint jelloTextureID;
+// Texture IDs for different image textures
+extern GLuint textureIDs[2];  // 0 = blue swirl, 1 = wood
 
-// Initialize the jello texture (call once at startup)
-int initJelloTexture(const char* filename);
+// Initialize all textures (call once at startup)
+int initTextures();
 
 #endif

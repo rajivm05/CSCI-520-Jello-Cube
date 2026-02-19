@@ -21,7 +21,8 @@ const char* getTextureModeName(int mode)
   {
     case 0:  return "Default";
     case 1:  return "Fresnel";
-    case 2:  return "Image Texture";
+    case 2:  return "Blue Swirl";
+    case 3:  return "Wood";
     default: return "Unknown";
   }
 }
