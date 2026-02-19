@@ -254,6 +254,7 @@ void display()
   renderFPS();
 
   glutSwapBuffers();
+  frameCount++;
 }
 
 void doIdle()
@@ -280,19 +281,19 @@ void doIdle()
   }
   lastFrameTime = currentTime;
 
-  char s[20]="picxxxx.ppm";
+  char s[20]="results/picxxxx.ppm";
   int i;
 
   // save screen to file
-  s[3] = 48 + (sprite / 1000);
-  s[4] = 48 + (sprite % 1000) / 100;
-  s[5] = 48 + (sprite % 100 ) / 10;
-  s[6] = 48 + sprite % 10;
+  s[11] = 48 + (sprite / 1000);
+  s[12] = 48 + (sprite % 1000) / 100;
+  s[13] = 48 + (sprite % 100 ) / 10;
+  s[14] = 48 + sprite % 10;
 
-  if (saveScreenToFile==1)
+  if (saveScreenToFile==1 && frameCount % 5 == 0)
   {
     saveScreenshot(windowWidth, windowHeight, s);
-    saveScreenToFile=0; // save only once, change this if you want continuos image generation (i.e. animation)
+    // saveScreenToFile=0; // save only once, change this if you want continuos image generation (i.e. animation)
     sprite++;
   }
 
