@@ -257,19 +257,66 @@ Next 512:   velocities          initial point velocities
 
 ## Extra Credit Features
 
-1. **Interactive Mouse Dragging** - Drag the jello cube in real-time with physics still running
+### 1. Interactive Mouse Dragging
+Drag the jello cube in real-time while physics simulation continues running.
 
-2. **Fresnel Procedural Texture** - View-dependent transparency with color change on collision
+**Technical Details:**
+- Converts 2D mouse movement to 3D world-space translation using camera's view plane
+- Computes camera's right vector `(-sin(Phi), cos(Phi), 0)` and up vector from spherical coordinates
+- Translates all 512 control points equally, maintaining cube integrity
+- Physics runs concurrently - cube deforms naturally when dragged into walls
+- Configurable sensitivity factor for drag speed
 
-3. **Multiple Image Textures** - Two image textures (blue swirl, wood) with automatic downsampling
+### 2. Fresnel Procedural Texture
+View-dependent transparency effect that simulates light behavior on translucent materials.
 
-4. **Custom Cinematic Lighting** - Three-point lighting setup for visually appealing renders
+**Technical Details:**
+- Computes view direction from camera position to each vertex
+- Fresnel term: `fresnel = pow(1.0 - |N·V|, 3.0)` where N is normal, V is view direction
+- Edges (grazing angles) appear more opaque, center (direct view) more transparent
+- **Dynamic color change:** Collision detection sets a flag in physics.cpp, which triggers color cycling in the render loop
+- 8-color palette: Red → Orange → Yellow → Green → Cyan → Blue → Purple → Pink
 
-5. **FPS Counter** - Real-time performance monitoring
+### 3. Image Texture Mapping
+Two high-resolution image textures with UV mapping on all faces.
 
-6. **Inclined Plane Visualization** - Rendered with proper clipping to bounding box
+**Technical Details:**
+- Uses **stb_image** single-header library for cross-platform image loading
+- Automatic downsampling: textures larger than 1024x1024 are resized using box filter
+- UV coordinates: `(i/7.0, j/7.0)` for vertex at grid position (i,j)
+- GL_REPLACE texture environment mode for true texture colors (not modulated by material)
+- Supports JPG, PNG, and other common formats
 
-7. **Multithreaded Physics** - Parallel computation using std::thread
+### 4. Custom Cinematic Lighting
+Professional three-point lighting setup replacing the default 8-light configuration.
+
+**Technical Details:**
+- **Key light (GL_LIGHT0):** Warm orange/gold `(1.0, 0.85, 0.6)` at `(3, -2, 3)` - main illumination
+- **Fill light (GL_LIGHT1):** Cool blue `(0.3, 0.4, 0.6)` at `(-3, -1, 1)` - shadow softening
+- **Rim light (GL_LIGHT2):** Pale yellow `(0.8, 0.8, 0.6)` at `(0, 3, 2)` - edge definition
+- **Under light (GL_LIGHT3):** Subtle purple `(0.2, 0.1, 0.3)` at `(0, 0, -3)` - depth
+- Custom material: red diffuse with warm specular highlights, shininess 80
+
+### 5. Inclined Plane Visualization
+Renders the collision plane as a semi-transparent polygon clipped to the bounding box.
+
+**Technical Details:**
+- Computes plane-box intersection by testing all 12 edges of the bounding box
+- Handles edge cases: vertices exactly on the plane `(|f| < 1e-6)`
+- Sorts intersection points by angle around centroid for correct polygon winding
+- Renders filled polygon with alpha blending `(0.8, 0.6, 0.2, 0.4)`
+- Renders outline for visibility `(0.9, 0.7, 0.2, 0.9)`
+
+### 6. Multithreaded Physics
+Parallelized force computation for improved performance on multi-core systems.
+
+**Technical Details:**
+- Uses C++11 `std::thread` (no external dependencies like OpenMP)
+- Detects hardware concurrency with `std::thread::hardware_concurrency()`
+- Block-based work distribution: 512 points divided among N threads
+- Thread-safe: each point writes only to its own acceleration entry
+- Template function `parallelForPoints()` for clean abstraction
+- Falls back to single-threaded execution if only 1 core available
 
 ---
 
