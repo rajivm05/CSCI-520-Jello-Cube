@@ -26,6 +26,9 @@ int g_iMenuId;
 int g_vMousePos[2];
 int g_iLeftMouseButton,g_iMiddleMouseButton,g_iRightMouseButton;
 
+// jello dragging
+int isDraggingJello = 0;
+
 // number of images saved to disk so far
 int sprite=0;
 

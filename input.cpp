@@ -43,19 +43,57 @@ void mouseMotionDrag(int x, int y)
   {
     Phi += vMouseDelta[0] * 0.01;
     Theta += vMouseDelta[1] * 0.01;
-    
+
     if (Phi>2*pi)
       Phi -= 2*pi;
-    
+
     if (Phi<0)
       Phi += 2*pi;
-    
+
     if (Theta>pi / 2 - 0.01) // dont let the point enter the north pole
       Theta = pi / 2 - 0.01;
-    
+
     if (Theta<- pi / 2 + 0.01)
       Theta = -pi / 2 + 0.01;
-    
+
+    g_vMousePos[0] = x;
+    g_vMousePos[1] = y;
+  }
+
+  if (g_iLeftMouseButton && isDraggingJello) // handle jello dragging
+  {
+    // Sensitivity factor for drag speed
+    double sensitivity = 0.01;
+
+    // Compute camera's right and up vectors in world space
+    // Camera looks at origin from position (R*cos(Phi)*cos(Theta), R*sin(Phi)*cos(Theta), R*sin(Theta))
+    // Right vector: perpendicular to view direction in XY plane
+    double rightX = -sin(Phi);
+    double rightY = cos(Phi);
+    double rightZ = 0.0;
+
+    // Up vector: perpendicular to both view and right (simplified for this camera)
+    double upX = -cos(Phi) * sin(Theta);
+    double upY = -sin(Phi) * sin(Theta);
+    double upZ = cos(Theta);
+
+    // Convert 2D mouse delta to 3D world delta
+    // Mouse X moves along camera's right vector
+    // Mouse Y moves along camera's up vector (inverted because screen Y is down)
+    double deltaX = (vMouseDelta[0] * rightX - vMouseDelta[1] * upX) * sensitivity;
+    double deltaY = (vMouseDelta[0] * rightY - vMouseDelta[1] * upY) * sensitivity;
+    double deltaZ = (vMouseDelta[0] * rightZ - vMouseDelta[1] * upZ) * sensitivity;
+
+    // Apply translation to all 512 jello points
+    for (int i = 0; i <= 7; i++)
+      for (int j = 0; j <= 7; j++)
+        for (int k = 0; k <= 7; k++)
+        {
+          jello.p[i][j][k].x += deltaX;
+          jello.p[i][j][k].y += deltaY;
+          jello.p[i][j][k].z += deltaZ;
+        }
+
     g_vMousePos[0] = x;
     g_vMousePos[1] = y;
   }
@@ -73,6 +111,7 @@ void mouseButton(int button, int state, int x, int y)
   {
     case GLUT_LEFT_BUTTON:
       g_iLeftMouseButton = (state==GLUT_DOWN);
+      isDraggingJello = (state==GLUT_DOWN);
       break;
     case GLUT_MIDDLE_BUTTON:
       g_iMiddleMouseButton = (state==GLUT_DOWN);
@@ -81,7 +120,7 @@ void mouseButton(int button, int state, int x, int y)
       g_iRightMouseButton = (state==GLUT_DOWN);
       break;
   }
- 
+
   g_vMousePos[0] = x;
   g_vMousePos[1] = y;
 }

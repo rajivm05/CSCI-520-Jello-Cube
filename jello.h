@@ -30,6 +30,9 @@ extern int sprite;
 extern int g_vMousePos[2];
 extern int g_iLeftMouseButton,g_iMiddleMouseButton,g_iRightMouseButton;
 
+// jello dragging
+extern int isDraggingJello;
+
 struct point 
 {
    double x;
